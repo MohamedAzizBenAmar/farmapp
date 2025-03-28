@@ -1,0 +1,479 @@
+import pandas as pd
+import numpy as np
+import streamlit as st
+import plotly.graph_objects as go
+import plotly.express as px
+import requests
+from sklearn.ensemble import RandomForestClassifier
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain
+from langchain.document_loaders import TextLoader
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.vectorstores import FAISS
+import google.generativeai as genai
+from typing import List, Dict, Tuple
+
+# Configuration initiale
+st.set_page_config(layout="wide", page_title="UrbanFarm AI", page_icon="🌱")
+
+# Charger les données
+@st.cache_data
+def load_data():
+    data = pd.read_csv("Crop_Recommendation.csv")
+    return data
+
+data = load_data()
+X = data.drop("Crop", axis=1)
+y = data["Crop"]
+
+# Entraîner le modèle
+@st.cache_resource
+def train_model():
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X, y)
+    return model
+
+model = train_model()
+
+# Préparer les références
+ideal_conditions = data.groupby("Crop").mean()
+ranges = data.groupby("Crop").agg(["min", "max"])
+nutritional_value = {
+    "Rice": 3.5, "Maize": 4.2, "Chickpea": 4.5, "Kidneybeans": 4.8,
+    "Pigeonpeas": 4.6, "Mothbeans": 4.3, "Mungbean": 4.4, "Blackgram": 4.7,
+    "Lentil": 4.6, "Pomegranate": 3.8, "Banana": 3.9, "Mango": 3.7,
+    "Grapes": 3.6, "Watermelon": 3.2, "Muskmelon": 3.3, "Apple": 3.4,
+    "Orange": 3.5, "Papaya": 3.6, "Coconut": 4.0, "Cotton": 1.5,
+    "Jute": 1.3, "Coffee": 2.0
+}
+
+# Configurer Gemini comme LLM
+GOOGLE_API_KEY = "AIzaSyBKDVdTMAUT62HmFQXE6roOX2cifaVUvaA"  # À remplacer par votre clé
+genai.configure(api_key=GOOGLE_API_KEY)
+
+class GeminiLLM:
+    def __init__(self, model_name="gemini-1.5-flash"):
+        self.model = genai.GenerativeModel(model_name)
+
+    def run(self, prompt: str) -> str:
+        response = self.model.generate_content(prompt)
+        return response.text
+
+llm = GeminiLLM()
+
+# Fonctions principales
+def get_top_crops(n: int, p: int, k: int, temp: float, hum: float, ph: float, rain: float) -> List[Tuple[str, float]]:
+    input_data = np.array([[n, p, k, temp, hum, ph, rain]])
+    probs = model.predict_proba(input_data)[0]
+    top_indices = np.argsort(probs)[-3:][::-1]
+    return [(model.classes_[i], probs[i]) for i in top_indices]
+
+def smart_recommendation(n: int, p: int, k: int, temp: float, hum: float, ph: float, rain: float, season: str) -> List[Tuple[str, float]]:
+    model_pred = model.predict_proba([[n, p, k, temp, hum, ph, rain]])
+    
+    seasonal_adjustment = {
+        "Printemps": {"boost": ["Tomato", "Lettuce"], "reduce": ["Rice", "Maize"]},
+        "Été": {"boost": ["Maize", "Watermelon"], "reduce": ["Lentil", "Blackgram"]},
+        "Automne": {"boost": ["Pumpkin", "Squash"], "reduce": ["Watermelon", "Muskmelon"]},
+        "Hiver": {"boost": ["Wheat", "Lentil"], "reduce": ["Maize", "Rice"]}
+    }
+    
+    for i, crop in enumerate(model.classes_):
+        if crop in seasonal_adjustment[season]["boost"]:
+            model_pred[0][i] *= 1.2
+        elif crop in seasonal_adjustment[season]["reduce"]:
+            model_pred[0][i] *= 0.8
+    
+    top_indices = np.argsort(model_pred[0])[-3:][::-1]
+    return [(model.classes_[i], model_pred[0][i]) for i in top_indices]
+
+def check_crop_feasibility(crop: str, n: int, p: int, k: int, temp: float, hum: float, ph: float, rain: float) -> str:
+    ideal = ideal_conditions.loc[crop]
+    current = {"Nitrogen": n, "Phosphorus": p, "Potassium": k, "Temperature": temp,
+               "Humidity": hum, "pH_Value": ph, "Rainfall": rain}
+    suggestions = []
+    for param, value in current.items():
+        ideal_value = ideal[param]
+        if abs(value - ideal_value) > 0.1 * ideal_value:
+            if value < ideal_value:
+                suggestions.append(f"Ajoutez {ideal_value - value:.1f} de {param}")
+            else:
+                suggestions.append(f"Réduisez {value - ideal_value:.1f} de {param}")
+    return "Viable" if not suggestions else "Ajustez : " + "; ".join(suggestions)
+
+def get_seasonal_crops(season: str) -> List[str]:
+    if season == "Été":
+        filtered = data[data["Temperature"] > 25]
+    elif season == "Hiver":
+        filtered = data[data["Temperature"] < 20]
+    else:
+        filtered = data[data["Temperature"].between(20, 25)]
+    return filtered["Crop"].value_counts().head(3).index.tolist()
+
+def nutrient_needs(crop: str, n: int, p: int, k: int) -> Dict[str, str]:
+    ideal = ideal_conditions.loc[crop]
+    needs = {}
+    for param, current, ideal_val in [("Nitrogen", n, ideal["Nitrogen"]),
+                                     ("Phosphorus", p, ideal["Phosphorus"]),
+                                     ("Potassium", k, ideal["Potassium"])]:
+        diff = ideal_val - current
+        if diff > 0:
+            needs[param] = f"Ajouter {diff:.1f} unités"
+    return needs if needs else {"Statut": "Niveaux optimaux"}
+
+def env_alerts(crop: str, temp: float, hum: float, rain: float) -> List[str]:
+    crop_ranges = ranges.loc[crop]
+    alerts = []
+    if temp < crop_ranges["Temperature"]["min"] or temp > crop_ranges["Temperature"]["max"]:
+        alerts.append(f"Température ({temp}°C) hors plage [{crop_ranges['Temperature']['min']}-{crop_ranges['Temperature']['max']}°C]")
+    if hum < crop_ranges["Humidity"]["min"] or hum > crop_ranges["Humidity"]["max"]:
+        alerts.append(f"Humidité ({hum}%) hors plage [{crop_ranges['Humidity']['min']}-{crop_ranges['Humidity']['max']}%]")
+    if rain < crop_ranges["Rainfall"]["min"] or rain > crop_ranges["Rainfall"]["max"]:
+        alerts.append(f"Pluie ({rain}mm) hors plage [{crop_ranges['Rainfall']['min']}-{crop_ranges['Rainfall']['max']}mm]")
+    return alerts if alerts else ["Conditions compatibles"]
+
+def compatibility_score(crop: str, n: int, p: int, k: int, temp: float, hum: float, ph: float, rain: float) -> float:
+    ideal = ideal_conditions.loc[crop]
+    current = [n, p, k, temp, hum, ph, rain]
+    ideal_vals = [ideal["Nitrogen"], ideal["Phosphorus"], ideal["Potassium"],
+                  ideal["Temperature"], ideal["Humidity"], ideal["pH_Value"], ideal["Rainfall"]]
+    max_vals = data.max()
+    distances = [abs(c - i) / m for c, i, m in zip(current, ideal_vals, max_vals)]
+    score = 100 * (1 - sum(distances) / len(distances))
+    return max(0, min(100, score))
+
+def calculate_sustainability(n: int, p: int, k: int, temp: float, hum: float, ph: float, rain: float) -> float:
+    # Convertir les données numériques uniquement
+    numeric_data = data.select_dtypes(include=['number'])
+    
+    ideal = numeric_data.groupby("Crop").mean().mean()
+    current = pd.Series([n, p, k, temp, hum, ph, rain], 
+                       index=["Nitrogen", "Phosphorus", "Potassium", 
+                              "Temperature", "Humidity", "pH_Value", "Rainfall"])
+    
+    # Calculer les écarts normalisés
+    deviations = (current - ideal).abs() / (numeric_data.max() - numeric_data.min())
+    sustainability = 100 * (1 - deviations.mean())
+    
+    # Pénalités pour les extrêmes
+    if ph < 5 or ph > 8:
+        sustainability -= 15
+    if temp > 35 or temp < 5:
+        sustainability -= 10
+        
+    return max(0, min(100, sustainability))
+
+def create_nutrient_radar(crop: str, n: int, p: int, k: int) -> go.Figure:
+    ideal = ideal_conditions.loc[crop]
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatterpolar(
+        r=[n, p, k],
+        theta=['Azote', 'Phosphore', 'Potassium'],
+        fill='toself',
+        name='Votre sol'
+    ))
+    
+    fig.add_trace(go.Scatterpolar(
+        r=[ideal["Nitrogen"], ideal["Phosphorus"], ideal["Potassium"]],
+        theta=['Azote', 'Phosphore', 'Potassium'],
+        fill='toself',
+        name='Idéal'
+    ))
+    
+    fig.update_layout(
+        polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[0, max(data["Nitrogen"].max(), data["Phosphorus"].max(), data["Potassium"].max())]
+            )),
+        showlegend=True,
+        title=f"Comparaison des nutriments pour {crop}"
+    )
+    return fig
+@st.cache_data
+def load_data():
+    data = pd.read_csv("Crop_Recommendation.csv")
+    
+    # Convertir les colonnes numériques
+    numeric_cols = ['Nitrogen', 'Phosphorus', 'Potassium', 'Temperature', 
+                   'Humidity', 'pH_Value', 'Rainfall']
+    
+    for col in numeric_cols:
+        data[col] = pd.to_numeric(data[col], errors='coerce')
+    
+    # Supprimer les lignes avec des valeurs manquantes
+    data = data.dropna()
+    
+    return data
+def create_sustainability_gauge(score: float) -> go.Figure:
+    fig = go.Figure(go.Indicator(
+        mode = "gauge+number",
+        value = score,
+        domain = {'x': [0, 1], 'y': [0, 1]},
+        title = {'text': "Score de Durabilité"},
+        gauge = {
+            'axis': {'range': [None, 100]},
+            'steps': [
+                {'range': [0, 40], 'color': "red"},
+                {'range': [40, 70], 'color': "yellow"},
+                {'range': [70, 100], 'color': "green"}],
+            'threshold': {
+                'line': {'color': "black", 'width': 4},
+                'thickness': 0.75,
+                'value': score}
+        }
+    ))
+    return fig
+
+# Interface Streamlit
+with st.sidebar:
+    st.header("🌱 Paramètres du Sol")
+    n = st.slider("Azote (N)", 0, 140, 80, help="Niveau d'azote dans le sol")
+    p = st.slider("Phosphore (P)", 0, 140, 40)
+    k = st.slider("Potassium (K)", 0, 205, 35)
+    temp = st.slider("Température (°C)", 0.0, 50.0, 22.5, step=0.1)
+    hum = st.slider("Humidité (%)", 0.0, 100.0, 70.0, step=0.1)
+    ph = st.slider("pH du sol", 3.0, 10.0, 6.2, step=0.1)
+    rain = st.slider("Précipitations (mm)", 0.0, 300.0, 120.0, step=1.0)
+    season = st.selectbox("Saison", ["Printemps", "Été", "Automne", "Hiver"])
+    crop_choice = st.selectbox("Culture à analyser", sorted(data["Crop"].unique()))
+    
+    if st.button("Analyse Complète", use_container_width=True):
+        st.session_state.analyze = True
+
+# Onglets principaux
+tab1, tab2, tab3, tab4 = st.tabs(["🏠 Dashboard", "📊 Analyse", "🤖 Assistant", "♻️ Durabilité"])
+
+with tab1:
+    st.header("Tableau de Bord UrbanFarm AI")
+    
+    if 'analyze' in st.session_state:
+        top_crops = smart_recommendation(n, p, k, temp, hum, ph, rain, season)
+        sustainability = calculate_sustainability(n, p, k, temp, hum, ph, rain)
+        feasibility = check_crop_feasibility(crop_choice, n, p, k, temp, hum, ph, rain)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Meilleure culture", top_crops[0][0], f"{top_crops[0][1]*100:.1f}%")
+        with col2:
+            st.metric("Score de durabilité", f"{sustainability:.0f}/100", 
+                     "Excellent" if sustainability > 80 else "Bon" if sustainability > 60 else "Moyen")
+        with col3:
+            num_adjustments = 0 if feasibility == "Viable" else len(feasibility.split(";"))
+            st.metric("Ajustements nécessaires", num_adjustments, 
+                     "Aucun" if num_adjustments == 0 else "Recommandés")
+        
+        st.subheader("Top 3 des Cultures Recommandées")
+        cols = st.columns(3)
+        for idx, (crop, prob) in enumerate(top_crops):
+            with cols[idx]:
+                st.metric(f"{idx+1}. {crop}", f"{prob*100:.1f}% de compatibilité")
+                
+                score = compatibility_score(crop, n, p, k, temp, hum, ph, rain)
+                st.progress(int(score))
+                st.caption(f"Score global: {score:.1f}/100")
+                
+                alerts = env_alerts(crop, temp, hum, rain)
+                if len(alerts) > 0:
+                    st.warning("⚠️ " + alerts[0])
+        
+        st.subheader("Compatibilité des Cultures")
+        fig = px.bar(
+            x=[crop for crop, _ in top_crops],
+            y=[compatibility_score(crop, n, p, k, temp, hum, ph, rain) for crop, _ in top_crops],
+            labels={'x': 'Culture', 'y': 'Score de compatibilité'},
+            color=[crop for crop, _ in top_crops],
+            height=400
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+with tab2:
+    st.header("Analyse Détailée")
+    
+    if 'analyze' in st.session_state:
+        st.subheader(f"Analyse pour {crop_choice}")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.plotly_chart(create_nutrient_radar(crop_choice, n, p, k), use_container_width=True)
+            
+            st.subheader("Besoins en Nutriments")
+            needs = nutrient_needs(crop_choice, n, p, k)
+            for nutrient, action in needs.items():
+                st.info(f"{nutrient}: {action}")
+        
+        with col2:
+            ideal = ideal_conditions.loc[crop_choice]
+            fig = go.Figure()
+            
+            params = ['Température', 'Humidité', 'Pluie']
+            current = [temp, hum, rain]
+            ideal_vals = [ideal['Temperature'], ideal['Humidity'], ideal['Rainfall']]
+            
+            fig.add_trace(go.Bar(
+                x=params,
+                y=current,
+                name='Vos conditions',
+                marker_color='blue'
+            ))
+            
+            fig.add_trace(go.Bar(
+                x=params,
+                y=ideal_vals,
+                name='Conditions idéales',
+                marker_color='green'
+            ))
+            
+            fig.update_layout(
+                barmode='group',
+                title='Comparaison des conditions environnementales',
+                yaxis_title='Valeur'
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.subheader("Alertes Environnementales")
+            alerts = env_alerts(crop_choice, temp, hum, rain)
+            for alert in alerts:
+                st.error(alert)
+
+with tab3:
+    st.header("Assistant Agricole Intelligent")
+    
+    # Initialiser l'historique de chat
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    
+    # Afficher l'historique des messages
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    
+    # Input utilisateur
+    if prompt := st.chat_input("Posez votre question sur l'agriculture urbaine..."):
+        # Ajouter le message utilisateur à l'historique
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        
+        # Générer le contexte
+        context = f"""
+        Conditions actuelles du sol:
+        - Azote (N): {n}
+        - Phosphore (P): {p}
+        - Potassium (K): {k}
+        - Température: {temp}°C
+        - Humidité: {hum}%
+        - pH: {ph}
+        - Précipitations: {rain}mm
+        
+        Culture analysée: {crop_choice}
+        Faisabilité: {check_crop_feasibility(crop_choice, n, p, k, temp, hum, ph, rain)}
+        """
+        
+        # Générer la réponse avec Gemini
+        full_prompt = f"""
+        Tu es un expert en agriculture urbaine durable. 
+        Voici le contexte actuel:
+        {context}
+        
+        Question: {prompt}
+        
+        Réponds de manière concise et technique, en te basant sur les données fournies.
+        Si la question concerne des ajustements, propose des solutions durables.
+        """
+        
+        try:
+            response = llm.run(full_prompt)
+        except Exception as e:
+            response = f"Désolé, une erreur est survenue: {str(e)}"
+        
+        # Afficher la réponse
+        with st.chat_message("assistant"):
+            st.markdown(response)
+        
+        # Ajouter la réponse à l'historique
+        st.session_state.messages.append({"role": "assistant", "content": response})
+
+with tab4:
+    st.header("Analyse de Durabilité")
+    
+    if 'analyze' in st.session_state:
+        sustainability = calculate_sustainability(n, p, k, temp, hum, ph, rain)
+        
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            st.plotly_chart(create_sustainability_gauge(sustainability), use_container_width=True)
+            
+            st.subheader("Impact Climatique")
+            co2_impact = {
+                "Bonne pratique": 0.2,
+                "Moyenne": 0.5,
+                "Votre sol": max(0.1, min(0.9, (100 - sustainability)/100 * 0.8 + 0.1))
+            }
+            
+            fig = px.bar(
+                x=list(co2_impact.keys()),
+                y=list(co2_impact.values()),
+                labels={'x': 'Scénario', 'y': 'Émissions relatives (CO2)'},
+                color=list(co2_impact.keys()),
+                color_discrete_map={"Votre sol": "red", "Moyenne": "orange", "Bonne pratique": "green"}
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            st.subheader("Recommandations pour Améliorer la Durabilité")
+            
+            recommendations = []
+            if ph < 5.5 or ph > 7.5:
+                recommendations.append(("Ajuster le pH", f"Le pH optimal est entre 6 et 7. Votre pH est {ph:.1f}."))
+            
+            if temp > 30 or temp < 10:
+                recommendations.append(("Protéger des températures extrêmes", 
+                                     f"La température actuelle ({temp}°C) peut stresser les plantes."))
+            
+            if (n + p + k) > 200:
+                recommendations.append(("Réduire les engrais", 
+                                     "Trop d'engrais peut polluer les nappes phréatiques."))
+            
+            if rain > 250:
+                recommendations.append(("Système de drainage", 
+                                     "Trop de pluie peut lessiver les nutriments."))
+            
+            if len(recommendations) == 0:
+                st.success("✅ Votre configuration est déjà très durable!")
+            else:
+                for title, desc in recommendations:
+                    with st.expander(f"🔧 {title}"):
+                        st.write(desc)
+                        st.write("**Solutions durables:**")
+                        
+                        if "pH" in title:
+                            st.write("- Ajouter de la chaux pour augmenter le pH")
+                            st.write("- Ajouter du soufre pour réduire le pH")
+                        
+                        if "températures" in title:
+                            st.write("- Utiliser des couvertures végétales")
+                            st.write("- Installer des brise-vent naturels")
+                        
+                        if "engrais" in title:
+                            st.write("- Utiliser des engrais organiques")
+                            st.write("- Planter des légumineuses pour fixer l'azote")
+            
+            st.subheader("Avantages Environnementaux")
+            benefits = [
+                f"Réduction potentielle de {int((100 - sustainability)/5)}% des émissions CO2",
+                f"Économie d'eau estimée à {int((100 - sustainability)/10)}%",
+                "Préservation de la biodiversité locale",
+                "Réduction des transports alimentaires"
+            ]
+            
+            for benefit in benefits:
+                st.info(f"🌱 {benefit}")
+
+# Section développeur (toujours visible dans cette version)
+with st.expander("Développeur : Données brutes"):
+    st.write(data.head())
+    st.write(f"Modèle entraîné sur {len(data)} échantillons")
+    st.write("Classes disponibles:", model.classes_)

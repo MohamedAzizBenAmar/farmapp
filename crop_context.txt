@@ -1,0 +1,66 @@
+Culture : Rice
+Conditions idéales - N: 79.9, P: 47.6, K: 39.9, Temp: 23.7°C, Hum: 82.3%, pH: 6.4, Rain: 236.2 mm
+
+Culture : Maize
+Conditions idéales - N: 77.8, P: 48.4, K: 19.8, Temp: 22.4°C, Hum: 65.1%, pH: 6.2, Rain: 84.8 mm
+
+Culture : ChickPea
+Conditions idéales - N: 40.1, P: 67.8, K: 79.9, Temp: 18.9°C, Hum: 16.9%, pH: 7.3, Rain: 80.1 mm
+
+Culture : KidneyBeans
+Conditions idéales - N: 20.8, P: 67.5, K: 20.1, Temp: 20.1°C, Hum: 21.6%, pH: 5.7, Rain: 105.9 mm
+
+Culture : PigeonPeas
+Conditions idéales - N: 20.7, P: 67.7, K: 20.3, Temp: 27.7°C, Hum: 48.1%, pH: 5.8, Rain: 149.5 mm
+
+Culture : MothBeans
+Conditions idéales - N: 21.4, P: 48.0, K: 20.2, Temp: 28.2°C, Hum: 53.2%, pH: 6.8, Rain: 51.2 mm
+
+Culture : MungBean
+Conditions idéales - N: 21.0, P: 47.3, K: 19.9, Temp: 28.5°C, Hum: 85.5%, pH: 6.7, Rain: 48.4 mm
+
+Culture : Blackgram
+Conditions idéales - N: 40.0, P: 67.5, K: 19.2, Temp: 30.0°C, Hum: 65.1%, pH: 7.1, Rain: 67.9 mm
+
+Culture : Lentil
+Conditions idéales - N: 18.8, P: 68.4, K: 19.4, Temp: 24.5°C, Hum: 64.8%, pH: 6.9, Rain: 45.7 mm
+
+Culture : Pomegranate
+Conditions idéales - N: 18.9, P: 18.8, K: 40.2, Temp: 21.8°C, Hum: 90.1%, pH: 6.4, Rain: 107.5 mm
+
+Culture : Banana
+Conditions idéales - N: 100.2, P: 82.0, K: 50.0, Temp: 27.4°C, Hum: 80.4%, pH: 6.0, Rain: 104.6 mm
+
+Culture : Mango
+Conditions idéales - N: 20.1, P: 27.2, K: 29.9, Temp: 31.2°C, Hum: 50.2%, pH: 5.8, Rain: 94.7 mm
+
+Culture : Grapes
+Conditions idéales - N: 23.2, P: 132.5, K: 200.1, Temp: 23.8°C, Hum: 81.9%, pH: 6.0, Rain: 69.6 mm
+
+Culture : Watermelon
+Conditions idéales - N: 99.4, P: 17.0, K: 50.2, Temp: 25.6°C, Hum: 85.2%, pH: 6.5, Rain: 50.8 mm
+
+Culture : Muskmelon
+Conditions idéales - N: 100.3, P: 17.7, K: 50.1, Temp: 28.7°C, Hum: 92.3%, pH: 6.4, Rain: 24.7 mm
+
+Culture : Apple
+Conditions idéales - N: 20.8, P: 134.2, K: 199.9, Temp: 22.6°C, Hum: 92.3%, pH: 5.9, Rain: 112.7 mm
+
+Culture : Orange
+Conditions idéales - N: 19.6, P: 16.6, K: 10.0, Temp: 22.8°C, Hum: 92.2%, pH: 7.0, Rain: 110.5 mm
+
+Culture : Papaya
+Conditions idéales - N: 49.9, P: 59.0, K: 50.0, Temp: 33.7°C, Hum: 92.4%, pH: 6.7, Rain: 142.6 mm
+
+Culture : Coconut
+Conditions idéales - N: 22.0, P: 16.9, K: 30.6, Temp: 27.4°C, Hum: 94.8%, pH: 6.0, Rain: 175.7 mm
+
+Culture : Cotton
+Conditions idéales - N: 117.8, P: 46.2, K: 19.6, Temp: 24.0°C, Hum: 79.8%, pH: 6.9, Rain: 80.4 mm
+
+Culture : Jute
+Conditions idéales - N: 78.4, P: 46.9, K: 40.0, Temp: 25.0°C, Hum: 79.6%, pH: 6.7, Rain: 174.8 mm
+
+Culture : Coffee
+Conditions idéales - N: 101.2, P: 28.7, K: 29.9, Temp: 25.5°C, Hum: 58.9%, pH: 6.8, Rain: 158.1 mm
+
