@@ -19,26 +19,44 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
 
-# Charger les variables d'environnement
+# Initialisation Streamlit (doit être la première commande)
+st.set_page_config(layout="wide", page_title="🌾 Smart Farming Assistant")
+
+# Chargement sécurisé des variables d'environnement
 load_dotenv()
 
-# Récupérer les clés
-API_KEY = os.getenv("OPENWEATHER_API_KEY")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-EMAIL_SENDER = os.getenv("EMAIL_SENDER")
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD").replace("_", " ")  # Si vous avez mis des underscores
-EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER")
-TWILIO_SID = os.getenv("TWILIO_SID")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
-RECEIVER_WHATSAPP = os.getenv("RECEIVER_WHATSAPP")
+def get_config_value(key, default=None, replace_underscores=False):
+    """Récupère une valeur de configuration de manière sécurisée"""
+    value = os.getenv(key, default)
+    if value is None:
+        st.error(f"Configuration manquante: {key}")
+        return None
+    if replace_underscores and isinstance(value, str):
+        return value.replace("_", " ")
+    return value
 
-# Configurer Gemini
+# Configuration des clés API
+API_KEY = get_config_value("OPENWEATHER_API_KEY")
+GOOGLE_API_KEY = get_config_value("GOOGLE_API_KEY")
+EMAIL_SENDER = get_config_value("EMAIL_SENDER")
+EMAIL_PASSWORD = get_config_value("EMAIL_PASSWORD", replace_underscores=True)
+EMAIL_RECEIVER = get_config_value("EMAIL_RECEIVER")
+TWILIO_SID = get_config_value("TWILIO_SID")
+TWILIO_AUTH_TOKEN = get_config_value("TWILIO_AUTH_TOKEN")
+TWILIO_WHATSAPP_NUMBER = get_config_value("TWILIO_WHATSAPP_NUMBER", "whatsapp:+14155238886")
+RECEIVER_WHATSAPP = get_config_value("RECEIVER_WHATSAPP", "whatsapp:+21626720354")
+
+# Vérification des clés essentielles
+if not all([API_KEY, GOOGLE_API_KEY]):
+    st.error("Configuration API manquante. Vérifiez vos clés dans le fichier .env")
+    st.stop()
+
+# Initialisation des services
 genai.configure(api_key=GOOGLE_API_KEY)
 
+# ================ CONSTANTES ET CONFIGURATION ================
 CITY = "Toronto"
 CROP = "maize"
-# ------------------ CONFIG ------------------
 
 # Crop-specific weekly watering needs in mm (1mm = 1L/m²)
 watering_guide = {
