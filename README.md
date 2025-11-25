@@ -1,4 +1,4 @@
-# Urban Farmer — AI Crop Recommendation & Smart Farming Assistant
+# FarmApp — AI Crop Recommendation & Smart Farming Assistant
 
 A practical, end-to-end AI assistant that helps growers choose the right crops for their soil and climate, evaluate feasibility, and act on weather-driven irrigation guidance. Built with Streamlit, scikit-learn, LangChain + Gemini, and OpenWeather.
 
