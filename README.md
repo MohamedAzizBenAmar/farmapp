@@ -101,12 +101,9 @@ Then in code, read via `st.secrets[...]` or `os.environ[...]`.
 ## ▶️ Run It
 Run the full assistant:
 ```powershell
-streamlit run urban_farmer.py
+streamlit run streamlit_app.py
 ```
-Try the simpler demo:
-```powershell
-streamlit run test.py
-```
+
 Optional notebook (EDA/experiments): open `crop_prediction.ipynb` in VS Code and run cells.
 
 ## 🧪 Recruiter-Friendly Demos
@@ -116,8 +113,7 @@ Optional notebook (EDA/experiments): open `crop_prediction.ipynb` in VS Code and
 
 ## 📁 Repository Structure
 ```
-├── urban_farmer.py           # Streamlit app (LLM + weather + alerts + RAG)
-├── test.py                   # Streamlit demo with RandomForest + RAG chatbot
+├── streamlit_app.py           # Streamlit app (LLM + weather + alerts + RAG)           
 ├── Crop_Recommendation.csv   # Dataset
 ├── crop_prediction.ipynb     # EDA / training notebook
 ├── crop_context.txt          # Auto-generated crop knowledge base
@@ -139,6 +135,3 @@ Optional notebook (EDA/experiments): open `crop_prediction.ipynb` in VS Code and
 - LLM: Google Gemini via `google-generativeai`.
 - NLP/RAG: LangChain + `sentence-transformers` + FAISS.
 - Weather: OpenWeather API.
-
----
-If you'd like, I can also add a `requirements.txt` and wire secrets loading into the app for production readiness.
